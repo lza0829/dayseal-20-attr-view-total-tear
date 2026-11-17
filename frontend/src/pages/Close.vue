@@ -50,10 +50,25 @@ function alignRows(rows) {
     <p class="msg" v-if="preview.corrected_count">
       其中 {{ preview.corrected_count }} 笔为跨日改归（合计 {{ preview.corrected_total.toFixed(2) }}），已计入上式；预览按落库营业日归集。
     </p>
+    <div class="msg err" v-if="preview.conflicting_count">
+      <p>
+        本日有 {{ preview.conflicting_count }} 笔流水的落库营业日与发生日不一致，
+        无法封账：这些行只按落库营业日计入一次，请先归位或移出该日。
+      </p>
+      <ul>
+        <li v-for="c in preview.conflicting_lines" :key="c.id">
+          {{ c.line_no }} · 落库 {{ c.business_day }} · 发生 {{ c.occurred_day }}
+        </li>
+      </ul>
+    </div>
+    <p class="msg" v-if="preview.incoming_conflicting_count">
+      另有 {{ preview.incoming_conflicting_count }} 笔发生日为本日、但落库在别处，未计入本日合计；
+      请核对它们的落库营业日。
+    </p>
     <p class="msg">归属策略：{{ preview.attribution.label }} —— {{ preview.attribution.description }}</p>
     <div class="row">
       <label>实盘现金 <input type="number" step="0.01" v-model.number="declared" /></label>
-      <button class="btn" :disabled="preview.sealed" @click="seal">封账</button>
+      <button class="btn" :disabled="preview.sealed || !preview.sealable" @click="seal">封账</button>
       <button class="btn ghost" @click="load">刷新</button>
     </div>
   </div>

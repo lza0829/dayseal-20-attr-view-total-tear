@@ -8,7 +8,6 @@ from app.db import connect
 from app.repositories import closes as close_repo
 from app.repositories import lines as line_repo
 from app.repositories import settings as settings_repo
-from app import partition_read
 from app import align_20 as align_mod
 
 
@@ -109,7 +108,7 @@ def create_line(body: dict[str, Any]) -> dict[str, Any]:
             occurred_at=resolution.occurred_at,
             amount=float(amount),
             pay_method=body.get("pay_method") or "现金",
-            note=(str(body.get("note") or '') + f"|declared={body.get('business_day') or ''}").strip('|'),
+            note=body.get("note"),
             created_at=created,
         )
         line = line_repo.get_line(conn, lid)

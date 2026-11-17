@@ -115,7 +115,11 @@ def get_line(conn: sqlite3.Connection, line_id: int) -> dict[str, Any] | None:
 
 
 def mismatched_lines(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """库中 business_day 与 occurred_at 发生日不一致的脏行（应为空）。"""
+    """库中 business_day 与 occurred_at 发生日不一致的脏行（应为空）。
+
+    这是唯一被承认的「分区键与落库列不符」形态：行挂在落库日下，但发生日在别处。
+    读路径不得为了迁就它另起一套分区键，只能把它暴露出来。
+    """
     rows = conn.execute(
         '''SELECT id, line_no, business_day, occurred_at,
                   substr(occurred_at, 1, 10) AS occurred_day
@@ -125,14 +129,41 @@ def mismatched_lines(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     ).fetchall()
     return [dict(r) for r in rows]
 
-def list_lines_by_declared(conn, declared_day: str) -> list[dict[str, Any]]:
-    rows = [dict(r) for r in conn.execute("SELECT * FROM sale_lines ORDER BY id").fetchall()]
-    out = []
-    for r in rows:
-        note = str(r.get("note") or "")
-        if r.get("business_day") == declared_day or f"declared={declared_day}" in note:
-            r = dict(r)
-            r["declared_day"] = declared_day
-            out.append(r)
-    return out
+
+def conflicting_lines(conn: sqlite3.Connection, business_day: str) -> list[dict[str, Any]]:
+    """落在 ``business_day`` 分区、但发生日不在此日的矛盾行。
+
+    这种行一旦进封，两侧预览会各按一套日期算账（双日各计／两日都不计）。
+    封账前必须暴露并挡在批次之外。
+    """
+    rows = conn.execute(
+        '''SELECT id, line_no, business_day, occurred_at,
+                  substr(occurred_at, 1, 10) AS occurred_day
+             FROM cash_lines
+            WHERE business_day = ?
+              AND business_day <> substr(occurred_at, 1, 10)
+            ORDER BY id''',
+        (business_day,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def incoming_conflicting_lines(
+    conn: sqlite3.Connection, business_day: str
+) -> list[dict[str, Any]]:
+    """发生日落在 ``business_day``、但落库在别处的矛盾行（只提示，不计入合计）。
+
+    它们按唯一分区键不属于本日；列出来是为了让「两日都不计」不可能悄悄发生，
+    同时明确本日合计并未包含它们。
+    """
+    rows = conn.execute(
+        '''SELECT id, line_no, business_day, occurred_at,
+                  substr(occurred_at, 1, 10) AS occurred_day
+             FROM cash_lines
+            WHERE business_day <> ?
+              AND substr(occurred_at, 1, 10) = ?
+            ORDER BY id''',
+        (business_day, business_day),
+    ).fetchall()
+    return [dict(r) for r in rows]
 

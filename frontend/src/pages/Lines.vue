@@ -55,10 +55,6 @@ async function doImport() {
 }
 
 onMounted(load)
-
-function declaredHint(row) {
-  return row.declared_day || row.request_day || row.business_day
-}
 </script>
 
 <template>
